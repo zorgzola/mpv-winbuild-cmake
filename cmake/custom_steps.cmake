@@ -20,9 +20,9 @@ function(cleanup _name _last_step)
         else()
             set(remove_cmd "find <BINARY_DIR> -mindepth 1 -delete && git -C <SOURCE_DIR> clean -df")
         endif()
-        set(COMMAND_FORCE_UPDATE COMMAND bash -c "git -C <SOURCE_DIR> am --abort 2> /dev/null || true"
+        set(COMMAND_FORCE_UPDATE COMMAND bash -c "test -d <SOURCE_DIR>/.git && git -C <SOURCE_DIR> am --abort 2> /dev/null || true"
                                  COMMAND ${stamp_dir}/reset_head.sh
-                                 COMMAND bash -c "git -C <SOURCE_DIR> restore .")
+                                 COMMAND bash -c "test -d <SOURCE_DIR>/.git && git -C <SOURCE_DIR> restore . || true")
     endif()
 
     # <STAMP_DIR> doesn't resolve into full path, so <LOG_DIR> is used instead since its same folder.
@@ -92,9 +92,27 @@ function(force_rebuild_git _name)
         set(reset "@{u}") # eg: origin/master
     endif()
 
+    # Wipe the stamps (and the broken checkout) of a package whose source dir
+    # lost its .git — e.g. a clone interrupted mid-download. Without this,
+    # plain `git`/`git -C <src>` walks up the directory tree and operates on
+    # the *workspace* repository instead (fetching wrong remotes, resetting
+    # unrelated HEADs). Clearing the download stamp makes the next build
+    # re-clone from scratch.
+    set(GIT_GUARD "
+if [[ ! -d \"${source_dir}/.git\" ]]; then
+    echo \"WARN: ${source_dir} is not a git repo (broken download); wiping ${_name} stamps to force re-clone\" >&2
+    find \"${stamp_dir}\" -type f ! -iname '*.cmake' -size 0c -delete
+    rm -f \"${stamp_dir}/${_name}-gitclone-lastrun.txt\" \"${stamp_dir}/HEAD\"
+    cd /
+    rm -rf \"${source_dir}\"
+    exit 0
+fi
+")
+
 file(WRITE ${stamp_dir}/reset_head.sh
 "#!/bin/bash
 set -e
+${GIT_GUARD}
 if [[ ! -f \"${stamp_dir}/${_name}-patch\"  || \"${stamp_dir}/${_name}-download\" -nt \"${stamp_dir}/${_name}-patch\" || ! -f \"${stamp_dir}/HEAD\" || \"$(cat ${stamp_dir}/HEAD)\" != \"$(git -C ${source_dir} rev-parse @{u})\" ]]; then
     git -C ${source_dir} reset --hard ${reset} -q
     if [[ -z \"${git_reset}\" ]]; then
@@ -105,17 +123,24 @@ if [[ ! -f \"${stamp_dir}/${_name}-patch\"  || \"${stamp_dir}/${_name}-download\
 else
     git -C ${source_dir} reset --hard -q
 fi")
-file(CHMOD ${stamp_dir}/reset_head.sh 
+file(CHMOD ${stamp_dir}/reset_head.sh
+PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
+
+file(WRITE ${stamp_dir}/force_update.sh
+"#!/bin/bash
+set -e
+${GIT_GUARD}cd \"${source_dir}\"
+git am --abort 2> /dev/null || true
+git fetch --filter=tree:0 --no-recurse-submodules || true
+exec bash \"${stamp_dir}/reset_head.sh\"")
+file(CHMOD ${stamp_dir}/force_update.sh
 PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
 
     ExternalProject_Add_Step(${_name} force-update
         ALWAYS TRUE
         EXCLUDE_FROM_MAIN TRUE
         INDEPENDENT TRUE
-        WORKING_DIRECTORY <SOURCE_DIR>
-        COMMAND bash -c "git am --abort 2> /dev/null || true"
-        COMMAND bash -c "git fetch --filter=tree:0 --no-recurse-submodules || true"
-        COMMAND ${stamp_dir}/reset_head.sh
+        COMMAND ${stamp_dir}/force_update.sh
     )
     ExternalProject_Add_StepTargets(${_name} force-update)
 

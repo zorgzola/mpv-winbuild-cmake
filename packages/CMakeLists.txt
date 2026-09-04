@@ -83,6 +83,7 @@ list(APPEND ep
     fast_float
     svtav1
     libdovi
+    orender
     libplacebo
     libva
     libzvbi
