@@ -10,6 +10,8 @@ command -v cargo-cinstall >/dev/null 2>&1 || cargo install cargo-c --locked")
 ExternalProject_Add(libdovi
     GIT_REPOSITORY https://github.com/quietvoid/dovi_tool.git
     SOURCE_DIR ${SOURCE_LOCATION}
+    GIT_REMOTE_NAME origin
+    GIT_TAG main
     GIT_CLONE_FLAGS "--filter=tree:0"
     UPDATE_COMMAND ""
     PATCH_COMMAND ""
