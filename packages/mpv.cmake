@@ -1,6 +1,30 @@
+get_property(src_asio_sdk TARGET asio-sdk PROPERTY _EP_SOURCE_DIR)
+
+# Apply the mpv-omniphony patch series (orender spatial audio, ASIO output,
+# built-in spatial overlay, ...) on top of upstream mpv master. git apply
+# --3way needs the base blobs, hence the full (unfiltered) clone below.
+set(APPLY_MPV_OMNI ${CMAKE_CURRENT_BINARY_DIR}/apply-mpv-omni-patches.sh)
+file(WRITE ${APPLY_MPV_OMNI}
+"#!/bin/bash
+set -e
+shopt -s nullglob
+cd \$1
+patches=(\$2/mpv-omni-*.patch)
+if [[ \${#patches[@]} -eq 0 ]]; then
+    echo \"ERROR: no mpv-omni-*.patch found in \$2\" >&2
+    exit 1
+fi
+echo \"Applying \${#patches[@]} mpv-omni patches\"
+for p in \"\${patches[@]}\"; do
+    echo \">> \$(basename \$p)\"
+    git apply --3way \"\$p\"
+done
+echo \"All mpv-omni patches applied\"")
+
 ExternalProject_Add(mpv
     DEPENDS
         angle-headers
+        asio-sdk
         ffmpeg
         fribidi
         lcms2
@@ -27,8 +51,8 @@ ExternalProject_Add(mpv
         curl
     GIT_REPOSITORY https://github.com/mpv-player/mpv.git
     SOURCE_DIR ${SOURCE_LOCATION}
-    GIT_CLONE_FLAGS "--filter=tree:0"
     UPDATE_COMMAND ""
+    PATCH_COMMAND ${EXEC} bash ${APPLY_MPV_OMNI} <SOURCE_DIR> ${CMAKE_CURRENT_SOURCE_DIR}
     CONFIGURE_COMMAND ${EXEC} CONF=1 meson setup <BINARY_DIR> <SOURCE_DIR>
         --prefix=${MINGW_INSTALL_PREFIX}
         --libdir=${MINGW_INSTALL_PREFIX}/lib
@@ -47,6 +71,9 @@ ExternalProject_Add(mpv
         -Dsdl2-gamepad=enabled
         -Dlibarchive=enabled
         -Dlibbluray=enabled
+        -Dorender=enabled
+        -Dasio=enabled
+        -Dasio-sdk=${src_asio_sdk}
         -Ddvdnav=enabled
         -Duchardet=enabled
         -Drubberband=enabled

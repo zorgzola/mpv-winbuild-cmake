@@ -25,6 +25,8 @@ ExternalProject_Add(libplacebo
         --cross-file=${MESON_CROSS}
         --default-library=static
         -Dd3d11=enabled
+        -Ddovi=enabled
+        -Dlibdovi=enabled
         -Ddebug=true
         -Db_ndebug=true
         -Doptimization=3

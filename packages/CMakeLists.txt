@@ -67,6 +67,7 @@ list(APPEND ep
     uavs3d
     davs2
     angle-headers
+    asio-sdk
     mujs
     spirv-headers
     spirv-tools
@@ -81,6 +82,7 @@ list(APPEND ep
     glad
     fast_float
     svtav1
+    libdovi
     libplacebo
     libva
     libzvbi
