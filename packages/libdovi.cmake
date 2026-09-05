@@ -22,6 +22,7 @@ ExternalProject_Add(libdovi
         cargo cinstall --release
         --manifest-path <SOURCE_DIR>/dolby_vision/Cargo.toml
         --target ${TARGET_CPU}-pc-windows-${rust_target}
+        --features capi
         --prefix ${MINGW_INSTALL_PREFIX}
         --libdir ${MINGW_INSTALL_PREFIX}/lib
         --pkgconfigdir ${MINGW_INSTALL_PREFIX}/lib/pkgconfig
