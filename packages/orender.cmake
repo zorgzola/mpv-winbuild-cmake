@@ -25,3 +25,12 @@ ExternalProject_Add(orender
 
 force_rebuild_git(orender)
 cleanup(orender install)
+
+# Stamp files are restored from the toolchain cache; drop the build stamps
+# at cmake-configure time so cargo build always runs and orender.dll is
+# regenerated for the mpv copy-binary step.
+get_property(_orender_stamp_dir TARGET orender PROPERTY _EP_STAMP_DIR)
+execute_process(COMMAND ${CMAKE_COMMAND} -E remove -f
+    ${_orender_stamp_dir}/orender-configure
+    ${_orender_stamp_dir}/orender-build
+    ${_orender_stamp_dir}/orender-install)

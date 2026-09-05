@@ -34,3 +34,13 @@ ExternalProject_Add(libdovi
 
 force_rebuild_git(libdovi)
 cleanup(libdovi install)
+
+# Stamp files are restored from the toolchain cache, so a changed
+# BUILD_COMMAND does not trigger a rebuild. Drop the build stamps at
+# cmake-configure time (the workflow reconfigures every run with
+# --fresh) so cargo cinstall always runs and reinstalls dovi.pc/dovi.h.
+get_property(_libdovi_stamp_dir TARGET libdovi PROPERTY _EP_STAMP_DIR)
+execute_process(COMMAND ${CMAKE_COMMAND} -E remove -f
+    ${_libdovi_stamp_dir}/libdovi-configure
+    ${_libdovi_stamp_dir}/libdovi-build
+    ${_libdovi_stamp_dir}/libdovi-install)
