@@ -83,12 +83,18 @@ function(force_rebuild_git _name)
     get_property(stamp_dir TARGET ${_name} PROPERTY _EP_STAMP_DIR)
     get_property(source_dir TARGET ${_name} PROPERTY _EP_SOURCE_DIR)
 
-    if("${git_remote_name}" STREQUAL "" AND NOT "${git_tag}" STREQUAL "")
-        # GIT_REMOTE_NAME is not set when commit hash is specified.
-        # Reset to the pinned commit: the repository cache may restore a
-        # checkout still sitting at the previous tag together with its
-        # stamps, which makes ExternalProject skip the clone/checkout step.
-        # Comparing against @{u} would never notice the changed pin.
+    # A true commit-hash pin (40 hex or short hash). Branch/tag pins
+    # (e.g. "main", "release-x") must keep tracking semantics.
+    set(git_tag_is_commit FALSE)
+    if(NOT "${git_tag}" STREQUAL "")
+        string(REGEX MATCH "^[0-9a-fA-F]{7,40}$" git_tag_is_commit "${git_tag}")
+    endif()
+
+    if(git_tag_is_commit)
+        # Commit-hash pin: reset to the pinned commit. The repository cache
+        # may restore a checkout still sitting at the previous tag together
+        # with its stamps, which makes ExternalProject skip the clone/checkout
+        # step. Comparing against @{u} would never notice the changed pin.
         set(reset "${git_tag}")
         set(compare_ref "${git_tag}")
     elseif(NOT "${git_reset}" STREQUAL "")
@@ -150,6 +156,23 @@ PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_
         COMMAND ${stamp_dir}/force_update.sh
     )
     ExternalProject_Add_StepTargets(${_name} force-update)
+
+    if(git_tag_is_commit)
+        # Automatically enforce the pinned commit on every build. reset_head.sh
+        # alone is only wired to manual targets (fullclean/force-update), so a
+        # normal ninja build never notices the repository cache restored a
+        # stale checkout (the skip-clone logic in check-git touches the
+        # download stamp and the pinned commit is silently ignored).
+        # Run before update (i.e. before patch) so the reset cannot clobber
+        # patches applied by a later step.
+        ExternalProject_Add_Step(${_name} pin-head
+            DEPENDEES download
+            DEPENDERS update
+            ALWAYS TRUE
+            COMMAND ${stamp_dir}/force_update.sh
+        )
+        ExternalProject_Add_StepTargets(${_name} pin-head)
+    endif()
 
     ExternalProject_Add_Step(${_name} write-head
         DEPENDERS patch
