@@ -5,7 +5,7 @@ ExternalProject_Add(libvpl
     GIT_REMOTE_NAME origin
     GIT_TAG main
     UPDATE_COMMAND ""
-    PATCH_COMMAND ${EXEC} git apply ${CMAKE_CURRENT_SOURCE_DIR}/libvpl-*.patch
+    PATCH_COMMAND ${EXEC} bash -c "cd <SOURCE_DIR> && patch -p1 < ${CMAKE_CURRENT_SOURCE_DIR}/libvpl-0001-fix-mscver-guard-for-mingw.patch"
     CONFIGURE_COMMAND ${EXEC} CONF=1 cmake -H<SOURCE_DIR> -B<BINARY_DIR>
         -G Ninja
         -DCMAKE_BUILD_TYPE=Release
