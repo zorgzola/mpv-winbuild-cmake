@@ -64,6 +64,9 @@ jobs:
 
       - name: Setup JDK and Ant for BD-J jar
         run: |
+          # pacman 6.1's landlock sandbox can't apply inside the GH container
+          # (CAP_SYS_ADMIN missing); drop the sandbox user to install as root.
+          sed -i '/^SandboxUser/d' /etc/pacman.conf
           pacman -Sy --noconfirm jdk-openjdk apache-ant
           java -version && javac -version && ant -version
 
