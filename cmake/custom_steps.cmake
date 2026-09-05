@@ -83,11 +83,17 @@ function(force_rebuild_git _name)
     get_property(stamp_dir TARGET ${_name} PROPERTY _EP_STAMP_DIR)
     get_property(source_dir TARGET ${_name} PROPERTY _EP_SOURCE_DIR)
 
-    # A true commit-hash pin (40 hex or short hash). Branch/tag pins
-    # (e.g. "main", "release-x") must keep tracking semantics.
+    # A true commit-hash pin (7-40 hex chars). Branch/tag pins like "main"
+    # or "release-*" must keep tracking semantics. NOTE: CMake's
+    # string(REGEX MATCH) does not support {m,n} quantifiers (braces are
+    # treated literally), so the length check is done explicitly.
     set(git_tag_is_commit FALSE)
     if(NOT "${git_tag}" STREQUAL "")
-        string(REGEX MATCH "^[0-9a-fA-F]{7,40}$" git_tag_is_commit "${git_tag}")
+        string(LENGTH "${git_tag}" git_tag_len)
+        if(git_tag_len GREATER_EQUAL 7 AND git_tag_len LESS_EQUAL 40
+           AND "${git_tag}" MATCHES "^[0-9a-fA-F]+$")
+            set(git_tag_is_commit TRUE)
+        endif()
     endif()
 
     if(git_tag_is_commit)
@@ -100,6 +106,13 @@ function(force_rebuild_git _name)
     elseif(NOT "${git_reset}" STREQUAL "")
         set(reset "${git_reset}")
         set(compare_ref "@{u}")
+    elseif(NOT "${git_tag}" STREQUAL "")
+        # Branch/tag pin (e.g. "main"): compare against the local ref, not
+        # @{u}. The clone checked out this ref, so HEAD matches only when the
+        # build tree reflects it. Using @{u} here makes upstream movement wipe
+        # the stamps of every package and trigger a full ~1h rebuild.
+        set(reset "${git_tag}")
+        set(compare_ref "${git_tag}")
     else()
         set(reset "@{u}") # eg: origin/master
         set(compare_ref "@{u}")
