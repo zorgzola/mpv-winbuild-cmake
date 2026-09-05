@@ -5,7 +5,7 @@ set(LIBDOVI_CARGOC ${CMAKE_CURRENT_BINARY_DIR}/libdovi-ensure-cargo-c.sh)
 file(WRITE ${LIBDOVI_CARGOC}
 "#!/bin/bash
 set -e
-command -v cargo-cinstall >/dev/null 2>&1 || cargo install cargo-c --locked")
+command -v cargo-cinstall >/dev/null 2>&1 || OPENSSL_DIR=/usr OPENSSL_LIB_DIR=/usr/lib OPENSSL_INCLUDE_DIR=/usr/include cargo install cargo-c --locked")
 
 ExternalProject_Add(libdovi
     GIT_REPOSITORY https://github.com/quietvoid/dovi_tool.git
