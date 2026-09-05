@@ -84,12 +84,19 @@ function(force_rebuild_git _name)
     get_property(source_dir TARGET ${_name} PROPERTY _EP_SOURCE_DIR)
 
     if("${git_remote_name}" STREQUAL "" AND NOT "${git_tag}" STREQUAL "")
-        # GIT_REMOTE_NAME is not set when commit hash is specified
-        set(reset "")
+        # GIT_REMOTE_NAME is not set when commit hash is specified.
+        # Reset to the pinned commit: the repository cache may restore a
+        # checkout still sitting at the previous tag together with its
+        # stamps, which makes ExternalProject skip the clone/checkout step.
+        # Comparing against @{u} would never notice the changed pin.
+        set(reset "${git_tag}")
+        set(compare_ref "${git_tag}")
     elseif(NOT "${git_reset}" STREQUAL "")
         set(reset "${git_reset}")
+        set(compare_ref "@{u}")
     else()
         set(reset "@{u}") # eg: origin/master
+        set(compare_ref "@{u}")
     endif()
 
     # Wipe the stamps (and the broken checkout) of a package whose source dir
@@ -113,7 +120,7 @@ file(WRITE ${stamp_dir}/reset_head.sh
 "#!/bin/bash
 set -e
 ${GIT_GUARD}
-if [[ ! -f \"${stamp_dir}/${_name}-patch\"  || \"${stamp_dir}/${_name}-download\" -nt \"${stamp_dir}/${_name}-patch\" || ! -f \"${stamp_dir}/HEAD\" || \"$(cat ${stamp_dir}/HEAD)\" != \"$(git -C ${source_dir} rev-parse @{u})\" ]]; then
+if [[ ! -f \"${stamp_dir}/${_name}-patch\"  || \"${stamp_dir}/${_name}-download\" -nt \"${stamp_dir}/${_name}-patch\" || ! -f \"${stamp_dir}/HEAD\" || \"$(cat ${stamp_dir}/HEAD)\" != \"$(git -C ${source_dir} rev-parse ${compare_ref})\" ]]; then
     git -C ${source_dir} reset --hard ${reset} -q
     if [[ -z \"${git_reset}\" ]]; then
         find \"${stamp_dir}\" -type f  ! -iname '*.cmake' -size 0c -delete
