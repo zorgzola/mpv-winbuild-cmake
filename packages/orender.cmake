@@ -8,6 +8,10 @@ set(ORENDER_BUILD ${CMAKE_CURRENT_BINARY_DIR}/orender-build.sh)
 file(WRITE ${ORENDER_BUILD}
 "#!/bin/bash
 set -e
+# This mingw toolchain ships no libgcc_eh.a; rustc's windows-gnu target
+# unconditionally passes -lgcc_eh, so point it at libgcc.a.
+_gcc_libdir=\$(dirname \$($2-gcc -print-libgcc-file-name 2>/dev/null || echo /nonexistent))
+[[ -d \"\$_gcc_libdir\" && ! -e \"\$_gcc_libdir/libgcc_eh.a\" ]] && ln -sf libgcc.a \"\$_gcc_libdir/libgcc_eh.a\" || true
 export RUSTFLAGS=\"-C panic=abort -C link-arg=-static-libgcc -C link-arg=-static-libstdc++\"
 LD_PRELOAD= cargo build --release -p orender_ffi \
     --manifest-path $1/omniphony-renderer/Cargo.toml \

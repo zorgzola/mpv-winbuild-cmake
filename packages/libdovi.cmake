@@ -6,6 +6,10 @@ file(WRITE ${LIBDOVI_BUILD}
 "#!/bin/bash
 set -e
 command -v cargo-cinstall >/dev/null 2>&1 || OPENSSL_DIR=/usr OPENSSL_LIB_DIR=/usr/lib OPENSSL_INCLUDE_DIR=/usr/include cargo install cargo-c --locked
+# This mingw toolchain ships no libgcc_eh.a; rustc's windows-gnu target
+# unconditionally passes -lgcc_eh, so point it at libgcc.a.
+_gcc_libdir=\$(dirname \$($2-gcc -print-libgcc-file-name 2>/dev/null || echo /nonexistent))
+[[ -d \"\$_gcc_libdir\" && ! -e \"\$_gcc_libdir/libgcc_eh.a\" ]] && ln -sf libgcc.a \"\$_gcc_libdir/libgcc_eh.a\" || true
 export RUSTFLAGS=\"-C panic=abort -C link-arg=-static-libgcc -C link-arg=-static-libstdc++\"
 LD_PRELOAD= CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 cargo cinstall --release \
     --manifest-path $1/dolby_vision/Cargo.toml \
