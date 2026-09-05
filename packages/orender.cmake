@@ -13,6 +13,7 @@ ExternalProject_Add(orender
     UPDATE_COMMAND ""
     PATCH_COMMAND ""
     CONFIGURE_COMMAND ""
+    BUILD_ALWAYS TRUE
     BUILD_COMMAND ${EXEC}
         LD_PRELOAD=
         cargo build --release -p orender_ffi
