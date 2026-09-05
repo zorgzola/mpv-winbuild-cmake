@@ -6,6 +6,7 @@ file(WRITE ${LIBDOVI_BUILD}
 "#!/bin/bash
 set -e
 command -v cargo-cinstall >/dev/null 2>&1 || OPENSSL_DIR=/usr OPENSSL_LIB_DIR=/usr/lib OPENSSL_INCLUDE_DIR=/usr/include cargo install cargo-c --locked
+export RUSTFLAGS=\"-C link-arg=-static-libgcc -C link-arg=-static-libstdc++\"
 LD_PRELOAD= CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 cargo cinstall --release \
     --manifest-path $1/dolby_vision/Cargo.toml \
     --target $2 \
