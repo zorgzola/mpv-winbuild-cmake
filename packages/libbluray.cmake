@@ -8,6 +8,7 @@ ExternalProject_Add(libbluray
     GIT_CLONE_FLAGS "--filter=tree:0"
     GIT_SUBMODULES ""
     UPDATE_COMMAND ""
+    PATCH_COMMAND ${EXEC} bash -c "cd <SOURCE_DIR> && patch -p1 < ${CMAKE_CURRENT_SOURCE_DIR}/libbluray-0001-win32-probe-bundled-jre-next-to-exe.patch"
     CONFIGURE_COMMAND ${EXEC} sed -i [['/find_library/d']] <SOURCE_DIR>/meson.build
     COMMAND ${EXEC} CONF=1 meson setup <BINARY_DIR> <SOURCE_DIR>
         --prefix=${MINGW_INSTALL_PREFIX}

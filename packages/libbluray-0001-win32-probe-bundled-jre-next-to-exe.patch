@@ -1,0 +1,40 @@
+diff --git a/src/libbluray/bdj/bdj.c b/src/libbluray/bdj/bdj.c
+index 359bc8f..6ba7700 100644
+--- a/src/libbluray/bdj/bdj.c
++++ b/src/libbluray/bdj/bdj.c
+@@ -459,6 +459,35 @@ static void *_load_jvm(const char **p_java_home, const char *app_java_home)
+         return _jvm_dlopen_a(java_home, jvm_dir, num_jvm_dir, jvm_lib);
+     }
+ 
++#if defined(_WIN32) && !defined(HAVE_BDJ_J2ME)
++    /* Portable JRE bundled next to the executable (self-contained player
++     * package layout): <exe_dir>/jre/bin/server/jvm.dll. Wins over an
++     * outdated system Java in the registry; a user-set JAVA_HOME still
++     * wins over this. */
++    {
++        static char exe_java_home[4096];
++        wchar_t exe_path[4096];
++        DWORD n = GetModuleFileNameW(NULL, exe_path, 4096);
++        if (n > 0 && n < 4096) {
++            wchar_t *slash = exe_path + n;
++            while (slash > exe_path && slash[-1] != L'\\')
++                slash--;
++            if (slash > exe_path && (size_t)(slash - exe_path) + 5 < 4096) {
++                wcscpy(slash, L"jre");
++                if (WideCharToMultiByte(CP_UTF8, 0, exe_path, -1, exe_java_home,
++                                        sizeof(exe_java_home), NULL, NULL)) {
++                    BD_DEBUG(DBG_BDJ, "Trying bundled JRE '%s'\n", exe_java_home);
++                    handle = _jvm_dlopen_a(exe_java_home, jvm_dir, num_jvm_dir, jvm_lib);
++                    if (handle) {
++                        *p_java_home = exe_java_home;
++                        return handle;
++                    }
++                }
++            }
++        }
++    }
++#endif
++
+ #if defined(_WIN32) && !defined(HAVE_BDJ_J2ME)
+     /* Try Windows registry */
+     handle = _load_jvm_win32(p_java_home);

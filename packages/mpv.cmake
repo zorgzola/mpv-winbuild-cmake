@@ -112,6 +112,16 @@ ExternalProject_Add_Step(mpv strip-binary
     COMMENT "Stripping mpv binaries"
 )
 
+# Portable JRE (Temurin) bundled next to mpv.exe so BD-J menus work on
+# machines without any system Java. The patched libbluray probes
+# <exe_dir>/jre before the Windows registry. Only copied when the build was
+# configured with -DJRE_BUNDLE_DIR pointing at a bundle containing
+# jre/bin/server/jvm.dll.
+set(mpv_copy_jre "")
+if(DEFINED JRE_BUNDLE_DIR AND EXISTS ${JRE_BUNDLE_DIR}/jre/bin/server/jvm.dll)
+    set(mpv_copy_jre COMMAND ${CMAKE_COMMAND} -E copy_directory ${JRE_BUNDLE_DIR}/jre ${CMAKE_CURRENT_BINARY_DIR}/mpv-package/jre)
+endif()
+
 ExternalProject_Add_Step(mpv copy-binary
     DEPENDEES strip-binary
     COMMAND ${CMAKE_COMMAND} -E copy <BINARY_DIR>/mpv.exe                           ${CMAKE_CURRENT_BINARY_DIR}/mpv-package/mpv.exe
@@ -128,6 +138,7 @@ ExternalProject_Add_Step(mpv copy-binary
     # libbluray is statically linked into mpv.exe, so its runtime jar search
     # starts from the module path (dl_get_path) = mpv.exe's directory.
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${MINGW_INSTALL_PREFIX}/share/java ${CMAKE_CURRENT_BINARY_DIR}/mpv-package
+    ${mpv_copy_jre}
     ${mpv_copy_debug}
     COMMAND ${CMAKE_COMMAND} -E copy <BINARY_DIR>/libmpv-2.dll          ${CMAKE_CURRENT_BINARY_DIR}/mpv-dev/libmpv-2.dll
     COMMAND ${CMAKE_COMMAND} -E copy <BINARY_DIR>/libmpv.dll.a          ${CMAKE_CURRENT_BINARY_DIR}/mpv-dev/libmpv.dll.a
