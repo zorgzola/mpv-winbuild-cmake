@@ -119,7 +119,10 @@ ExternalProject_Add_Step(mpv strip-binary
 # jre/bin/server/jvm.dll.
 set(mpv_copy_jre "")
 if(DEFINED JRE_BUNDLE_DIR AND EXISTS ${JRE_BUNDLE_DIR}/jre/bin/server/jvm.dll)
+    message(STATUS "Bundling JRE from ${JRE_BUNDLE_DIR}/jre")
     set(mpv_copy_jre COMMAND ${CMAKE_COMMAND} -E copy_directory ${JRE_BUNDLE_DIR}/jre ${CMAKE_CURRENT_BINARY_DIR}/mpv-package/jre)
+elseif(DEFINED JRE_BUNDLE_DIR)
+    message(WARNING "JRE_BUNDLE_DIR set but ${JRE_BUNDLE_DIR}/jre/bin/server/jvm.dll not found - BD-J bundle skipped")
 endif()
 
 ExternalProject_Add_Step(mpv copy-binary
