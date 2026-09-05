@@ -3,7 +3,13 @@ ExternalProject_Add(libudfread
     GIT_TAG 139a2194525f2745b98a98e4d8fa627d07440176
     SOURCE_DIR ${SOURCE_LOCATION}
     GIT_CLONE_FLAGS "--filter=tree:0"
-    UPDATE_COMMAND ""
+    # libudfread master (>= 2026-08-26) reworked UDF directory parsing and
+    # breaks listing directory-based AppCache entries (e.g. BDMV/JAR/00001/
+    # on some BD-J discs), killing the Xlet. Pin to the commit libbluray's
+    # submodule uses. The update step runs on every build, so this also
+    # repairs a repository cache that restored a newer checkout: git skips
+    # rewriting unchanged files, making the reset idempotent and cheap.
+    UPDATE_COMMAND ${EXEC} git -C <SOURCE_DIR> reset --hard 139a2194525f2745b98a98e4d8fa627d07440176
     CONFIGURE_COMMAND ${EXEC} CONF=1 meson setup <BINARY_DIR> <SOURCE_DIR>
         --prefix=${MINGW_INSTALL_PREFIX}
         --libdir=${MINGW_INSTALL_PREFIX}/lib

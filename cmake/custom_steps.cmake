@@ -83,39 +83,13 @@ function(force_rebuild_git _name)
     get_property(stamp_dir TARGET ${_name} PROPERTY _EP_STAMP_DIR)
     get_property(source_dir TARGET ${_name} PROPERTY _EP_SOURCE_DIR)
 
-    # A true commit-hash pin (7-40 hex chars). Branch/tag pins like "main"
-    # or "release-*" must keep tracking semantics. NOTE: CMake's
-    # string(REGEX MATCH) does not support {m,n} quantifiers (braces are
-    # treated literally), so the length check is done explicitly.
-    set(git_tag_is_commit FALSE)
-    if(NOT "${git_tag}" STREQUAL "")
-        string(LENGTH "${git_tag}" git_tag_len)
-        if(git_tag_len GREATER_EQUAL 7 AND git_tag_len LESS_EQUAL 40
-           AND "${git_tag}" MATCHES "^[0-9a-fA-F]+$")
-            set(git_tag_is_commit TRUE)
-        endif()
-    endif()
-
-    if(git_tag_is_commit)
-        # Commit-hash pin: reset to the pinned commit. The repository cache
-        # may restore a checkout still sitting at the previous tag together
-        # with its stamps, which makes ExternalProject skip the clone/checkout
-        # step. Comparing against @{u} would never notice the changed pin.
-        set(reset "${git_tag}")
-        set(compare_ref "${git_tag}")
+    if("${git_remote_name}" STREQUAL "" AND NOT "${git_tag}" STREQUAL "")
+        # GIT_REMOTE_NAME is not set when commit hash is specified
+        set(reset "")
     elseif(NOT "${git_reset}" STREQUAL "")
         set(reset "${git_reset}")
-        set(compare_ref "@{u}")
-    elseif(NOT "${git_tag}" STREQUAL "")
-        # Branch/tag pin (e.g. "main"): compare against the local ref, not
-        # @{u}. The clone checked out this ref, so HEAD matches only when the
-        # build tree reflects it. Using @{u} here makes upstream movement wipe
-        # the stamps of every package and trigger a full ~1h rebuild.
-        set(reset "${git_tag}")
-        set(compare_ref "${git_tag}")
     else()
         set(reset "@{u}") # eg: origin/master
-        set(compare_ref "@{u}")
     endif()
 
     # Wipe the stamps (and the broken checkout) of a package whose source dir
@@ -139,7 +113,7 @@ file(WRITE ${stamp_dir}/reset_head.sh
 "#!/bin/bash
 set -e
 ${GIT_GUARD}
-if [[ ! -f \"${stamp_dir}/${_name}-patch\"  || \"${stamp_dir}/${_name}-download\" -nt \"${stamp_dir}/${_name}-patch\" || ! -f \"${stamp_dir}/HEAD\" || \"$(cat ${stamp_dir}/HEAD)\" != \"$(git -C ${source_dir} rev-parse ${compare_ref})\" ]]; then
+if [[ ! -f \"${stamp_dir}/${_name}-patch\"  || \"${stamp_dir}/${_name}-download\" -nt \"${stamp_dir}/${_name}-patch\" || ! -f \"${stamp_dir}/HEAD\" || \"$(cat ${stamp_dir}/HEAD)\" != \"$(git -C ${source_dir} rev-parse @{u})\" ]]; then
     git -C ${source_dir} reset --hard ${reset} -q
     if [[ -z \"${git_reset}\" ]]; then
         find \"${stamp_dir}\" -type f  ! -iname '*.cmake' -size 0c -delete
@@ -169,23 +143,6 @@ PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_
         COMMAND ${stamp_dir}/force_update.sh
     )
     ExternalProject_Add_StepTargets(${_name} force-update)
-
-    if(git_tag_is_commit)
-        # Automatically enforce the pinned commit on every build. reset_head.sh
-        # alone is only wired to manual targets (fullclean/force-update), so a
-        # normal ninja build never notices the repository cache restored a
-        # stale checkout (the skip-clone logic in check-git touches the
-        # download stamp and the pinned commit is silently ignored).
-        # Run before update (i.e. before patch) so the reset cannot clobber
-        # patches applied by a later step.
-        ExternalProject_Add_Step(${_name} pin-head
-            DEPENDEES download
-            DEPENDERS patch
-            ALWAYS TRUE
-            COMMAND ${stamp_dir}/force_update.sh
-        )
-        ExternalProject_Add_StepTargets(${_name} pin-head)
-    endif()
 
     ExternalProject_Add_Step(${_name} write-head
         DEPENDERS patch

@@ -69,19 +69,6 @@ jobs:
           pacman -Sy --noconfirm --disable-sandbox jdk-openjdk apache-ant
           java -version && javac -version && ant -version
 
-      - name: Download Temurin JRE for self-contained BD-J
-        run: |
-          # Windows x64 JRE shipped next to mpv.exe as jre/ so BD-J menus
-          # work without any system Java. Kept in $RUNNER_TEMP because
-          # actions/checkout wipes the workspace (git clean -ffdx) after
-          # this step would otherwise delete it.
-          curl -sL --connect-timeout 60 --retry 999 --retry-delay 5 --retry-all-errors \
-            -o "$RUNNER_TEMP/jre.zip" "https://api.adoptium.net/v3/binary/latest/21/ga/windows/x64/jre/hotspot/normal/eclipse"
-          mkdir -p "$RUNNER_TEMP/jre-bundle"
-          7z x -y -o"$RUNNER_TEMP/jre-bundle" "$RUNNER_TEMP/jre.zip" > /dev/null
-          mv "$RUNNER_TEMP"/jre-bundle/jdk-*-jre "$RUNNER_TEMP/jre-bundle/jre"
-          test -f "$RUNNER_TEMP/jre-bundle/jre/bin/server/jvm.dll" && echo "JRE bundle ready"
-
       - uses: actions/checkout@main
         with:
           ref: master
@@ -118,7 +105,7 @@ jobs:
 
       - name: Downloading source
         run: |
-          cmake -DTARGET_ARCH=${{ env.arch }}-w64-mingw32 ${{ env.gcc_arch }} -DSINGLE_SOURCE_LOCATION=$PWD/src_packages -DRUSTUP_LOCATION=$PWD/clang_root/install_rustup -DJRE_BUNDLE_DIR=$RUNNER_TEMP/jre-bundle -DENABLE_CCACHE=ON --fresh -G Ninja -B build_$BIT -S $PWD
+          cmake -DTARGET_ARCH=${{ env.arch }}-w64-mingw32 ${{ env.gcc_arch }} -DSINGLE_SOURCE_LOCATION=$PWD/src_packages -DRUSTUP_LOCATION=$PWD/clang_root/install_rustup -DENABLE_CCACHE=ON --fresh -G Ninja -B build_$BIT -S $PWD
           ninja -C build_$BIT download || true
 
       - name: Building toolchain
