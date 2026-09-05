@@ -124,10 +124,15 @@ ExternalProject_Add_Step(mpv copy-binary
     COMMAND ${CMAKE_COMMAND} -E copy <SOURCE_DIR>/etc/mpv-unregister.bat            ${CMAKE_CURRENT_BINARY_DIR}/mpv-package/mpv-unregister.bat
     COMMAND ${CMAKE_COMMAND} -E copy <BINARY_DIR>/mpv.pdf                           ${CMAKE_CURRENT_BINARY_DIR}/mpv-package/doc/manual.pdf
     COMMAND ${CMAKE_COMMAND} -E copy ${MINGW_INSTALL_PREFIX}/etc/fonts/fonts.conf   ${CMAKE_CURRENT_BINARY_DIR}/mpv-package/mpv/fonts.conf
-    # BD-J jars (libbluray-j2se-<ver>.jar + libbluray-awt-j2se-<ver>.jar).
+    # BD-J jars. Ship the prebuilt jars in packages/bdj instead of the ones
+    # built from upstream libbluray 1.5.1: they carry the on-demand VFSCache
+    # (accessFileImp) chain needed for directory-based BD-J resources (e.g.
+    # Top Gun's BDMV/JAR/00001/) that AppCache does not cover. Verified
+    # against our statically linked libbluray (JNI-compatible, run34 test).
     # libbluray is statically linked into mpv.exe, so its runtime jar search
-    # starts from the module path (dl_get_path) = mpv.exe's directory.
-    COMMAND ${CMAKE_COMMAND} -E copy_directory ${MINGW_INSTALL_PREFIX}/share/java ${CMAKE_CURRENT_BINARY_DIR}/mpv-package
+    # starts from the module paths (dl_get_path) = mpv.exe's directory.
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/bdj/libbluray-j2se-1.5.1.jar     ${CMAKE_CURRENT_BINARY_DIR}/mpv-package/libbluray-j2se-1.5.1.jar
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/bdj/libbluray-awt-j2se-1.5.1.jar ${CMAKE_CURRENT_BINARY_DIR}/mpv-package/libbluray-awt-j2se-1.5.1.jar
     ${mpv_copy_debug}
     COMMAND ${CMAKE_COMMAND} -E copy <BINARY_DIR>/libmpv-2.dll          ${CMAKE_CURRENT_BINARY_DIR}/mpv-dev/libmpv-2.dll
     COMMAND ${CMAKE_COMMAND} -E copy <BINARY_DIR>/libmpv.dll.a          ${CMAKE_CURRENT_BINARY_DIR}/mpv-dev/libmpv.dll.a
