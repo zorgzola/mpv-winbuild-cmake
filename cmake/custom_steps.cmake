@@ -180,7 +180,7 @@ PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_
         # patches applied by a later step.
         ExternalProject_Add_Step(${_name} pin-head
             DEPENDEES download
-            DEPENDERS update
+            DEPENDERS patch
             ALWAYS TRUE
             COMMAND ${stamp_dir}/force_update.sh
         )
