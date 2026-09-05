@@ -8,7 +8,7 @@ set(ORENDER_BUILD ${CMAKE_CURRENT_BINARY_DIR}/orender-build.sh)
 file(WRITE ${ORENDER_BUILD}
 "#!/bin/bash
 set -e
-export RUSTFLAGS=\"-C link-arg=-static-libgcc -C link-arg=-static-libstdc++\"
+export RUSTFLAGS=\"-C panic=abort -C link-arg=-static-libgcc -C link-arg=-static-libstdc++\"
 LD_PRELOAD= cargo build --release -p orender_ffi \
     --manifest-path $1/omniphony-renderer/Cargo.toml \
     --target $2")
