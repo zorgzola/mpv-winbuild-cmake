@@ -16,7 +16,7 @@ ExternalProject_Add(libbluray
         --buildtype=release
         --default-library=static
         -Denable_tools=false
-        -Dbdj_jar=disabled
+        -Dbdj_jar=enabled
         -Dfreetype=enabled
         -Dlibxml2=enabled
         "-Dc_args='-Ddec_init=libbluray_dec_init -Ddir_open_default=libbluray_dir_open_default -Dfile_open_default=libbluray_file_open_default'"

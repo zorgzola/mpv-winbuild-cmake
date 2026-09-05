@@ -62,6 +62,11 @@ jobs:
           git config --global fetch.prune true
           git config --global --add safe.directory $PWD
 
+      - name: Setup JDK and Ant for BD-J jar
+        run: |
+          pacman -Sy --noconfirm jdk-openjdk apache-ant
+          java -version && javac -version && ant -version
+
       - uses: actions/checkout@main
         with:
           ref: master

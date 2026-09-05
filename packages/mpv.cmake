@@ -124,6 +124,10 @@ ExternalProject_Add_Step(mpv copy-binary
     COMMAND ${CMAKE_COMMAND} -E copy <SOURCE_DIR>/etc/mpv-unregister.bat            ${CMAKE_CURRENT_BINARY_DIR}/mpv-package/mpv-unregister.bat
     COMMAND ${CMAKE_COMMAND} -E copy <BINARY_DIR>/mpv.pdf                           ${CMAKE_CURRENT_BINARY_DIR}/mpv-package/doc/manual.pdf
     COMMAND ${CMAKE_COMMAND} -E copy ${MINGW_INSTALL_PREFIX}/etc/fonts/fonts.conf   ${CMAKE_CURRENT_BINARY_DIR}/mpv-package/mpv/fonts.conf
+    # BD-J jars (libbluray-j2se-<ver>.jar + libbluray-awt-j2se-<ver>.jar).
+    # libbluray is statically linked into mpv.exe, so its runtime jar search
+    # starts from the module path (dl_get_path) = mpv.exe's directory.
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${MINGW_INSTALL_PREFIX}/share/java ${CMAKE_CURRENT_BINARY_DIR}/mpv-package
     ${mpv_copy_debug}
     COMMAND ${CMAKE_COMMAND} -E copy <BINARY_DIR>/libmpv-2.dll          ${CMAKE_CURRENT_BINARY_DIR}/mpv-dev/libmpv-2.dll
     COMMAND ${CMAKE_COMMAND} -E copy <BINARY_DIR>/libmpv.dll.a          ${CMAKE_CURRENT_BINARY_DIR}/mpv-dev/libmpv.dll.a
