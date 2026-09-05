@@ -10,7 +10,7 @@ file(WRITE ${ORENDER_BUILD}
 set -e
 # This mingw toolchain ships no libgcc_eh.a; rustc's windows-gnu target
 # unconditionally passes -lgcc_eh, so point it at libgcc.a.
-_gcc_libdir=\$(dirname \$($2-gcc -print-libgcc-file-name 2>/dev/null || echo /nonexistent))
+_gcc_libdir=\$(dirname \$($3-gcc -print-libgcc-file-name 2>/dev/null || echo /nonexistent))
 [[ -d \"\$_gcc_libdir\" && ! -e \"\$_gcc_libdir/libgcc_eh.a\" ]] && ln -sf libgcc.a \"\$_gcc_libdir/libgcc_eh.a\" || true
 export RUSTFLAGS=\"-C panic=abort -C link-arg=-static-libgcc -C link-arg=-static-libstdc++\"
 LD_PRELOAD= cargo build --release -p orender_ffi \
@@ -31,6 +31,7 @@ ExternalProject_Add(orender
     CONFIGURE_COMMAND ${EXEC} bash ${ORENDER_BUILD}
         <SOURCE_DIR>
         ${TARGET_CPU}-pc-windows-${rust_target}
+        ${TARGET_ARCH}
     BUILD_COMMAND ${EXEC} true
     INSTALL_COMMAND ""
     LOG_DOWNLOAD 1 LOG_UPDATE 1 LOG_CONFIGURE 1 LOG_BUILD 1 LOG_INSTALL 1
