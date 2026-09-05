@@ -1,0 +1,70 @@
+diff --git a/demux/demux_disc.c b/demux/demux_disc.c
+index 5004fc1..9b0816f 100644
+--- a/demux/demux_disc.c
++++ b/demux/demux_disc.c
+@@ -27,6 +27,7 @@
+ #include "demux.h"
+ #include "packet.h"
+ #include "stheader.h"
++#include "misc/thread_tools.h"
+ 
+ #include "video/csputils.h"
+ 
+@@ -739,9 +740,33 @@ static bool reopen_slave(struct demuxer *demuxer)
+     // Between positions an open would only probe an EOF. The peek pumps
+     // the stream's event loop, the bytes stay buffered for the probe.
+     uint8_t hdr[192];
+-    if (stream_read_peek(demuxer->stream, hdr, sizeof(hdr)) <= 0) {
+-        p->slave = NULL;
+-        return false;
++    int64_t bdj_deadline = 0;
++    while (stream_read_peek(demuxer->stream, hdr, sizeof(hdr)) <= 0) {
++        // A BD-J applet starting the next title's playlist needs a moment,
++        // and a re-armed drain would stall the stream's event loop. Wait
++        // bounded for the VM to settle instead of failing the reopen right
++        // away; the reopen retry below keeps the session alive.
++        if (!(p->is_bd && p->nav_active) || mp_cancel_test(demuxer->cancel)) {
++            p->slave = NULL;
++            return false;
++        }
++        struct stream_nav_state nav3 = {0};
++        if (stream_control(demuxer->stream, STREAM_CTRL_GET_NAV_STATE, &nav3) >= 1
++            && nav3.drain_pending)
++        {
++            // Back-to-back BD-J jump: ack it so the event loop can advance.
++            stream_control(demuxer->stream, STREAM_CTRL_NAV_DRAIN_ACK, NULL);
++            bdj_deadline = 0; // fresh jump, restart the bounded wait
++            continue;
++        }
++        if (!bdj_deadline) {
++            bdj_deadline = mp_time_ns() + MP_TIME_S_TO_NS(2);
++        } else if (mp_time_ns() >= bdj_deadline) {
++            MP_VERBOSE(demuxer, "BD-J title switch did not settle, EOF.\n");
++            p->slave = NULL;
++            return false;
++        }
++        mp_cancel_wait(demuxer->cancel, 0.02);
+     }
+     MP_VERBOSE(demuxer, "reopening slave demuxer\n");
+     p->slave = demux_open_url("-", &params, demuxer->cancel, demuxer->global);
+@@ -869,8 +894,19 @@ static bool d_read_packet(struct demuxer *demuxer, struct demux_packet **out_pkt
+         // through the seek path. BD has no in-band boundary, handle it here,
+         // after the resync seek.
+         if (!p->is_dvd && nav.discontinuity_id != p->last_discontinuity_id) {
+-            if (nav.drain_pending)
++            if (nav.drain_pending && !(p->is_bd && p->nav_active))
+                 return false;
++            if (nav.drain_pending) {
++                // BD-J title switches can re-arm the drain right after the
++                // player's resync seek acked a previous jump. The player
++                // will not send another seek for the EOF this read would
++                // return: ack the drain here and handle the jump through
++                // the slave reopen below instead of ending the session.
++                MP_VERBOSE(demuxer, "re-armed drain at disc id %u, "
++                           "handling without player resync\n",
++                           nav.discontinuity_id);
++                stream_control(demuxer->stream, STREAM_CTRL_NAV_DRAIN_ACK, NULL);
++            }
+             MP_VERBOSE(demuxer, "discontinuity %u->%u, handling\n",
+                        p->last_discontinuity_id, nav.discontinuity_id);
+             if (!process_discontinuity(demuxer, nav.discontinuity_id))
