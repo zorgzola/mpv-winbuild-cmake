@@ -1,5 +1,5 @@
 diff --git a/demux/demux_disc.c b/demux/demux_disc.c
-index 5004fc1..c544d3c 100644
+index 5004fc1..6f1efce 100644
 --- a/demux/demux_disc.c
 +++ b/demux/demux_disc.c
 @@ -27,6 +27,7 @@
@@ -10,7 +10,38 @@ index 5004fc1..c544d3c 100644
  
  #include "video/csputils.h"
  
-@@ -739,9 +740,33 @@ static bool reopen_slave(struct demuxer *demuxer)
+@@ -109,6 +110,9 @@ struct priv {
+     bool eof_log_still;
+ 
+     bool is_dvd, is_dvda, is_cdda, is_bd;
++    // BD-J jump storm guard: stamps each slave reopen, so that a drain
++    // re-armed within a second is treated as a jump storm (see reopen_slave()).
++    int64_t last_reopen_ts;
+ 
+     // DVD-Audio still-image video track.
+     struct sh_stream *still_sh;
+@@ -716,6 +720,20 @@ static void refresh_disc_metadata(struct demuxer *demuxer)
+ static bool reopen_slave(struct demuxer *demuxer)
+ {
+     struct priv *p = demuxer->priv;
++    // BD-J jump storm guard: title switches can re-arm back-to-back, and
++    // rebuilding the slave demuxer on every drain starves the demux queue
++    // (0s cache, per-frame underruns). When jumps come faster than once per
++    // second, defer to the player resync protocol (EOF -> seek) instead of
++    // chasing every drain; slow target switches (e.g. a BD-J applet starting
++    // the next playlist) still reopen normally below.
++    if (p->last_reopen_ts &&
++        mp_time_ns() - p->last_reopen_ts < MP_TIME_S_TO_NS(1))
++    {
++        MP_VERBOSE(demuxer, "BD-J jump storm, deferring to player resync\n");
++        p->slave = NULL;
++        return false;
++    }
++    p->last_reopen_ts = mp_time_ns();
+ 
+     struct demuxer_params params = {
+         .force_format = "+lavf",
+@@ -739,9 +757,33 @@ static bool reopen_slave(struct demuxer *demuxer)
      // Between positions an open would only probe an EOF. The peek pumps
      // the stream's event loop, the bytes stay buffered for the probe.
      uint8_t hdr[192];
@@ -47,7 +78,7 @@ index 5004fc1..c544d3c 100644
      }
      MP_VERBOSE(demuxer, "reopening slave demuxer\n");
      p->slave = demux_open_url("-", &params, demuxer->cancel, demuxer->global);
-@@ -869,8 +894,19 @@ static bool d_read_packet(struct demuxer *demuxer, struct demux_packet **out_pkt
+@@ -869,8 +911,19 @@ static bool d_read_packet(struct demuxer *demuxer, struct demux_packet **out_pkt
          // through the seek path. BD has no in-band boundary, handle it here,
          // after the resync seek.
          if (!p->is_dvd && nav.discontinuity_id != p->last_discontinuity_id) {
@@ -68,7 +99,7 @@ index 5004fc1..c544d3c 100644
              MP_VERBOSE(demuxer, "discontinuity %u->%u, handling\n",
                         p->last_discontinuity_id, nav.discontinuity_id);
              if (!process_discontinuity(demuxer, nav.discontinuity_id))
-@@ -925,6 +961,22 @@ static bool d_read_packet(struct demuxer *demuxer, struct demux_packet **out_pkt
+@@ -925,6 +978,22 @@ static bool d_read_packet(struct demuxer *demuxer, struct demux_packet **out_pkt
              if (!process_discontinuity(demuxer, nav2.discontinuity_id))
                  return false;
              pkt = demux_read_any_packet(p->slave);
