@@ -1,4 +1,4 @@
-name: mpv gcc
+name: mpv gcc run35 稳定版
 defaults:
   run:
     shell: bash
