@@ -64,6 +64,14 @@ ExternalProject_Add(mpv
         libsixel
         curl
     GIT_REPOSITORY https://github.com/mpv-player/mpv.git
+    # Pin to a concrete master commit instead of tracking the moving branch:
+    # every CI run clones src_packages fresh (no repository cache), so an
+    # unpinned master drift breaks the patch series' 3-way base (e.g. the
+    # DSD-over-PCM series reworked filters/f_decoder_wrapper.c/.h where the
+    # orender patch 0001 hooks, breaking the 2026-09-06 build).
+    # f5bcfb1 == upstream master tip right before that series; all 30 omni
+    # patches apply cleanly on it (verified locally with git apply --3way).
+    GIT_TAG f5bcfb195412e0ca733eac2e850879cd3b1ded18
     SOURCE_DIR ${SOURCE_LOCATION}
     UPDATE_COMMAND ""
     PATCH_COMMAND ${EXEC} bash ${APPLY_MPV_OMNI} <SOURCE_DIR> ${CMAKE_CURRENT_SOURCE_DIR}
