@@ -1,0 +1,160 @@
+diff --git a/demux/demux.c b/demux/demux.c
+index 78c6b7e..9f1de6e 100644
+--- a/demux/demux.c
++++ b/demux/demux.c
+@@ -101,6 +101,10 @@ const struct m_sub_options demux_conf = {
+             {"no", 0}, {"auto", -1}, {"yes", 1})},
+         {"cache-on-disk", OPT_BOOL(disk_cache)},
+         {"demuxer-readahead-secs", OPT_DOUBLE(min_secs), M_RANGE(0, DBL_MAX)},
++        {"demuxer-nav-readahead-secs", OPT_DOUBLE(nav_readahead_secs),
++            M_RANGE(0, DBL_MAX)},
++        {"demuxer-nav-readahead-bytes", OPT_BYTE_SIZE(nav_readahead_bytes),
++            M_RANGE(0, M_MAX_MEM_BYTES)},
+         {"demuxer-hysteresis-secs", OPT_DOUBLE(hyst_secs), M_RANGE(0, DBL_MAX)},
+         {"demuxer-hysteresis-bytes", OPT_BYTE_SIZE(hyst_bytes),
+             M_RANGE(0, M_MAX_MEM_BYTES)},
+@@ -210,6 +214,9 @@ struct demux_internal {
+     size_t hyst_bytes;          // stop reading till there's hyst_bytes remaining
+     bool hyst_active;
+     bool nav_active;            // disc navigation (DVD/BD menus) is active
++    bool nav_feature;           // a long feature title is playing under disc nav
++    double nav_readahead_secs;  // bounded read-ahead target inside a feature
++    size_t nav_readahead_bytes; // .. and its forward-cache byte cap
+     bool nav_pump;              // one-shot request to force a single read
+     size_t max_bytes;
+     size_t max_bytes_bw;
+@@ -2359,10 +2366,18 @@ static bool read_packet(struct demux_internal *in)
+             ds->queue->last_ts >= ds->base_ts &&
+             !in->back_demuxing)
+         {
++            double target_secs = in->min_secs;
++            // Inside a long disc feature title, use the (much smaller) nav
++            // read-ahead target so the cache never races far ahead of where
++            // the user is in the disc VM. This is the "bounded" read-ahead:
++            // menus and stills keep zero prefetch, the movie gets just enough
++            // (default ~2s) to never starve the decoder.
++            if (in->nav_active && in->nav_feature)
++                target_secs = in->nav_readahead_secs;
+             if (ds->queue->last_ts - ds->base_ts <= in->hyst_secs)
+                 in->hyst_active = false;
+             if (!in->hyst_active)
+-                prefetch_more |= ds->queue->last_ts - ds->base_ts < in->min_secs;
++                prefetch_more |= ds->queue->last_ts - ds->base_ts < target_secs;
+         }
+         total_fw_bytes += get_forward_buffered_bytes(ds);
+     }
+@@ -2372,16 +2387,25 @@ static bool read_packet(struct demux_internal *in)
+         prefetch_more |= true;
+     }
+ 
+-    // While interactive disc navigation is active, never read ahead. It would
+-    // advance the disc VM past what the user is watching. Reads still happen
+-    // whenever a selected stream demands data.
+-    if (in->nav_active)
++    // While interactive disc navigation is active, never read ahead -- except
++    // inside a long feature title (the movie itself). Reading ahead in a
++    // menu, still or short clip would advance the disc VM past the button,
++    // branch or BD-J/HDMV jump the user is on. Inside a long feature the
++    // read-ahead stays bounded (demuxer-nav-readahead-*), see above. Reads
++    // still happen whenever a selected stream demands data.
++    if (in->nav_active && !in->nav_feature)
+         prefetch_more = false;
+     prefetch_more |= in->nav_pump;
+ 
+     MP_TRACE(in, "bytes=%zd, read_more=%d prefetch_more=%d, refresh_more=%d\n",
+              (size_t)total_fw_bytes, read_more, prefetch_more, refresh_more);
+-    if (total_fw_bytes >= in->max_bytes) {
++    uint64_t fw_limit = in->max_bytes;
++    // Inside a long disc feature title, cap the forward cache at the nav
++    // read-ahead byte limit instead of demuxer-max-bytes, so we never
++    // pre-read large parts of the disc while the VM is still navigating.
++    if (in->nav_active && in->nav_feature)
++        fw_limit = in->nav_readahead_bytes;
++    if (total_fw_bytes >= fw_limit) {
+         // if we hit the limit just by prefetching, simply stop prefetching
+         if (!read_more) {
+             in->hyst_active = in->hyst_secs > 0 || in->hyst_bytes > 0;
+@@ -3304,6 +3328,22 @@ void demux_set_nav_active(demuxer_t *demuxer, bool active)
+     mp_mutex_unlock(&in->lock);
+ }
+ 
++// Tell the cache whether the disc navigation has moved into a long feature
++// title (the movie itself). While false (menu, still, short clip) the demuxer
++// must not read ahead at all.
++void demux_set_nav_feature(demuxer_t *demuxer, bool feature)
++{
++    struct demux_internal *in = demuxer->in;
++    mp_assert(demuxer == in->d_thread);
++
++    mp_mutex_lock(&in->lock);
++    if (in->nav_feature != feature) {
++        in->nav_feature = feature;
++        mp_cond_signal(&in->wakeup);
++    }
++    mp_mutex_unlock(&in->lock);
++}
++
+ // Updates the chapters/editions should it need to be changed. Used for demuxers
+ // that changes titles/playlists at runtime.
+ void demux_lists_changed(demuxer_t *demuxer)
+diff --git a/demux/demux.h b/demux/demux.h
+index 9ee332a..2cbcc1d 100644
+--- a/demux/demux.h
++++ b/demux/demux.h
+@@ -364,6 +364,7 @@ void demux_close_stream(struct demuxer *demuxer);
+ void demux_metadata_changed(demuxer_t *demuxer);
+ void demux_set_duration(demuxer_t *demuxer, double duration);
+ void demux_set_nav_active(demuxer_t *demuxer, bool active);
++void demux_set_nav_feature(demuxer_t *demuxer, bool feature);
+ void demux_lists_changed(demuxer_t *demuxer);
+ void demux_update(demuxer_t *demuxer, double playback_pts);
+ 
+diff --git a/demux/demux_disc.c b/demux/demux_disc.c
+index 6f1efce..d6f3b2c 100644
+--- a/demux/demux_disc.c
++++ b/demux/demux_disc.c
+@@ -106,6 +106,7 @@ struct priv {
+     bool seek_reinit;   // needs reinit after seek
+     uint32_t last_discontinuity_id; // Last source-position-jump id seen from the stream.
+     bool nav_active;    // last interactive-nav state pushed to the cache
++    bool feature_active; // last long-feature state pushed to the cache
+     uint32_t eof_log_id;    // last logged EOF state, avoids per-read spam
+     bool eof_log_still;
+ 
+@@ -907,6 +908,10 @@ static bool d_read_packet(struct demuxer *demuxer, struct demux_packet **out_pkt
+             p->nav_active = nav.nav_active;
+             demux_set_nav_active(demuxer, nav.nav_active);
+         }
++        if (nav.feature_active != p->feature_active) {
++            p->feature_active = nav.feature_active;
++            demux_set_nav_feature(demuxer, nav.feature_active);
++        }
+         // DVD holds an EOF at jump boundaries and the player resyncs
+         // through the seek path. BD has no in-band boundary, handle it here,
+         // after the resync seek.
+diff --git a/stream/stream.h b/stream/stream.h
+index 9fda0a8..6b193bc 100644
+--- a/stream/stream.h
++++ b/stream/stream.h
+@@ -169,6 +169,7 @@ struct mp_dvdnav_highlight {
+ struct stream_nav_state {
+     bool nav_active;         // interactive disc navigation is enabled
+     bool menu_active;        // a selectable menu/highlight is currently visible
++    bool feature_active;     // a long feature title (the movie itself) is playing
+     bool still_active;       // holding an indefinite still frame
+     int  src_w, src_h;       // dimensions of the coordinate space mouse uses
+     struct mp_dvdnav_highlight hl; // focused button highlight (DVD only)
+diff --git a/stream/stream_bluray.c b/stream/stream_bluray.c
+index 04b2520..8c9a9c7 100644
+--- a/stream/stream_bluray.c
++++ b/stream/stream_bluray.c
+@@ -1014,6 +1014,9 @@ static int bluray_stream_control(stream_t *s, int cmd, void *arg)
+         *st = (struct stream_nav_state){
+             .nav_active = true,
+             .menu_active = b->ig.visible || b->pg.visible,
++            .feature_active = b->title_info &&
++                b->title_info->clip_count > 0 &&
++                BD_TIME_TO_S(b->title_info->duration) >= DISC_FEATURE_SECS,
+             .still_active = b->still_active,
+             .src_w = MPMAX(b->ig.disp_w, b->pg.disp_w),
+             .src_h = MPMAX(b->ig.disp_h, b->pg.disp_h),
