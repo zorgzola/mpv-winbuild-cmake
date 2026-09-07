@@ -1,5 +1,5 @@
 diff --git a/demux/demux.c b/demux/demux.c
-index 78c6b7e..9f1de6e 100644
+index 78c6b7e..e16186c 100644
 --- a/demux/demux.c
 +++ b/demux/demux.c
 @@ -101,6 +101,10 @@ const struct m_sub_options demux_conf = {
@@ -13,7 +13,16 @@ index 78c6b7e..9f1de6e 100644
          {"demuxer-hysteresis-secs", OPT_DOUBLE(hyst_secs), M_RANGE(0, DBL_MAX)},
          {"demuxer-hysteresis-bytes", OPT_BYTE_SIZE(hyst_bytes),
              M_RANGE(0, M_MAX_MEM_BYTES)},
-@@ -210,6 +214,9 @@ struct demux_internal {
+@@ -143,6 +147,8 @@ const struct m_sub_options demux_conf = {
+         .donate_fw = true,
+         .min_secs = 1.0,
+         .min_secs_cache = 1000.0 * 60 * 60,
++        .nav_readahead_secs = 2.0,
++        .nav_readahead_bytes = 16 * 1024 * 1024,
+         .seekable_cache = -1,
+         .index_mode = 1,
+         .mf_fps = 1.0,
+@@ -210,6 +216,9 @@ struct demux_internal {
      size_t hyst_bytes;          // stop reading till there's hyst_bytes remaining
      bool hyst_active;
      bool nav_active;            // disc navigation (DVD/BD menus) is active
@@ -23,7 +32,7 @@ index 78c6b7e..9f1de6e 100644
      bool nav_pump;              // one-shot request to force a single read
      size_t max_bytes;
      size_t max_bytes_bw;
-@@ -2359,10 +2366,18 @@ static bool read_packet(struct demux_internal *in)
+@@ -2359,10 +2368,18 @@ static bool read_packet(struct demux_internal *in)
              ds->queue->last_ts >= ds->base_ts &&
              !in->back_demuxing)
          {
@@ -43,7 +52,7 @@ index 78c6b7e..9f1de6e 100644
          }
          total_fw_bytes += get_forward_buffered_bytes(ds);
      }
-@@ -2372,16 +2387,25 @@ static bool read_packet(struct demux_internal *in)
+@@ -2372,16 +2389,25 @@ static bool read_packet(struct demux_internal *in)
          prefetch_more |= true;
      }
  
@@ -74,7 +83,16 @@ index 78c6b7e..9f1de6e 100644
          // if we hit the limit just by prefetching, simply stop prefetching
          if (!read_more) {
              in->hyst_active = in->hyst_secs > 0 || in->hyst_bytes > 0;
-@@ -3304,6 +3328,22 @@ void demux_set_nav_active(demuxer_t *demuxer, bool active)
+@@ -2651,6 +2677,8 @@ static void update_opts(struct demuxer *demuxer)
+     in->min_secs = opts->min_secs;
+     in->hyst_secs = opts->hyst_secs;
+     in->hyst_bytes = opts->hyst_bytes;
++    in->nav_readahead_secs = opts->nav_readahead_secs;
++    in->nav_readahead_bytes = opts->nav_readahead_bytes;
+     in->max_bytes = opts->max_bytes;
+     in->max_bytes_bw = opts->max_bytes_bw;
+ 
+@@ -3304,6 +3332,22 @@ void demux_set_nav_active(demuxer_t *demuxer, bool active)
      mp_mutex_unlock(&in->lock);
  }
  
@@ -98,10 +116,19 @@ index 78c6b7e..9f1de6e 100644
  // that changes titles/playlists at runtime.
  void demux_lists_changed(demuxer_t *demuxer)
 diff --git a/demux/demux.h b/demux/demux.h
-index 9ee332a..2cbcc1d 100644
+index 9ee332a..bc5328a 100644
 --- a/demux/demux.h
 +++ b/demux/demux.h
-@@ -364,6 +364,7 @@ void demux_close_stream(struct demuxer *demuxer);
+@@ -72,6 +72,8 @@ struct demux_opts {
+     double min_secs;
+     double hyst_secs;
+     int64_t hyst_bytes;
++    double nav_readahead_secs;
++    int64_t nav_readahead_bytes;
+     bool force_seekable;
+     double min_secs_cache;
+     bool access_references;
+@@ -364,6 +366,7 @@ void demux_close_stream(struct demuxer *demuxer);
  void demux_metadata_changed(demuxer_t *demuxer);
  void demux_set_duration(demuxer_t *demuxer, double duration);
  void demux_set_nav_active(demuxer_t *demuxer, bool active);
@@ -145,10 +172,23 @@ index 9fda0a8..6b193bc 100644
      int  src_w, src_h;       // dimensions of the coordinate space mouse uses
      struct mp_dvdnav_highlight hl; // focused button highlight (DVD only)
 diff --git a/stream/stream_bluray.c b/stream/stream_bluray.c
-index 04b2520..8c9a9c7 100644
+index 04b2520..b3eed0d 100644
 --- a/stream/stream_bluray.c
 +++ b/stream/stream_bluray.c
-@@ -1014,6 +1014,9 @@ static int bluray_stream_control(stream_t *s, int cmd, void *arg)
+@@ -71,6 +71,12 @@
+ // In menu mode, tolerate this many consecutive idle reads at the end of playlist
+ #define BLURAY_NAV_EOF_POLLS 100
+ 
++// A title whose playlist is at least this long is treated as the feature
++// (the movie itself). Everything shorter -- menus, previews, stills, short
++// clips -- must be consumed strictly on navigational demand, and the demuxer
++// keeps zero read-ahead for them.
++#define DISC_FEATURE_SECS 60.0
++
+ // copied from aacs.h in libaacs
+ #define AACS_ERROR_CORRUPTED_DISC -1 /* opening or reading of AACS files failed */
+ #define AACS_ERROR_NO_CONFIG      -2 /* missing config file */
+@@ -1014,6 +1020,9 @@ static int bluray_stream_control(stream_t *s, int cmd, void *arg)
          *st = (struct stream_nav_state){
              .nav_active = true,
              .menu_active = b->ig.visible || b->pg.visible,
