@@ -1,0 +1,45 @@
+diff --git a/player/core.h b/player/core.h
+index 2889d35..b249a44 100644
+--- a/player/core.h
++++ b/player/core.h
+@@ -449,6 +449,11 @@ typedef struct MPContext {
+     struct disc_nav_state *disc_nav;
+     // Demuxer parked on an indefinite still frame (DVD/BD menu).
+     bool disc_nav_still_frame;
++    // A BD-J menu overlay is on screen. Pure-ARGB menu titles carry no A/V
++    // packets, so the demuxer reports EOF for them; this flag holds the
++    // player at EOF (like still_frame) until the user navigates or the VM
++    // jumps into a real title.
++    bool disc_nav_menu_active;
+     struct encode_lavc_context *encode_lavc_ctx;
+ 
+     struct mp_option_callback *option_callbacks;
+diff --git a/player/discnav.c b/player/discnav.c
+index 6eb885e..6adb581 100644
+--- a/player/discnav.c
++++ b/player/discnav.c
+@@ -492,6 +492,8 @@ void disc_nav_update(struct MPContext *mpctx)
+         st->menu_selected_track = NULL;
+         st->menu_saved_track = NULL;
+         st->overlay_change_seen = false;
++        mpctx->disc_nav_menu_active = false;
++        mpctx->disc_nav_still_frame = false;
+         if (st->menu_active_seen && st->last_menu_active) {
+             st->last_menu_active = false;
+             mp_notify_property(mpctx, "disc-menu-active");
+diff --git a/player/playloop.c b/player/playloop.c
+index e35b2e8..313066c 100644
+--- a/player/playloop.c
++++ b/player/playloop.c
+@@ -1259,6 +1259,11 @@ static void handle_eof(struct MPContext *mpctx)
+      * drains and the menu frame is shown. Hold it until the user navigates,
+      * rather than ending the file. */
+     prevent_eof |= mpctx->disc_nav_still_frame;
++    /* A BD-J menu title can be pure ARGB -- no A/V packets at all -- so the
++     * demuxer reports EOF for it while the menu VM keeps running on screen.
++     * Hold the file like a still frame; disc_nav_update() keeps pumping the
++     * VM at 20Hz so button navigation and title jumps still work. */
++    prevent_eof |= mpctx->disc_nav_menu_active;
+     /* It's possible for the user to simultaneously switch both audio
+      * and video streams to "disabled" at runtime. Handle this by waiting
+      * rather than immediately stopping playback due to EOF.

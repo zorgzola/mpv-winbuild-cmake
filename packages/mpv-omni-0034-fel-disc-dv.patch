@@ -1,9 +1,8 @@
 diff --git a/demux/demux_disc.c b/demux/demux_disc.c
-index 5004fc1..067ea094f 100644
+index d6f3b2c..7a25490 100644
 --- a/demux/demux_disc.c
 +++ b/demux/demux_disc.c
-@@ -422,6 +422,51 @@ static void sync_streams(struct demuxer *demuxer)
-             MP_TARRAY_APPEND(grp, grp->members, grp->num_members, outer_member);
+@@ -444,6 +445,64 @@ static void sync_streams(struct demuxer *demuxer)
              outer_member->group = grp;
          }
      }
@@ -44,6 +43,19 @@ index 5004fc1..067ea094f 100644
 +                           "(libbluray dv_streams)\n",
 +                           bl->demuxer_id, el->demuxer_id);
 +                el->dependent_track = true;
++                // Profile 7 carries the DV metadata (RPU/color) on the EL;
++                // mirror it onto the BL codec so the player recognizes the
++                // base layer as DV immediately, instead of only after
++                // el_pair's inherit_dovi_from_el() sees the first EL frame
++                // (which is what produced the HDR-first, DV-a-few-seconds
++                // startup lag on profile 7 discs).
++                if (bl->codec && el->codec) {
++                    bl->codec->dovi = true;
++                    bl->codec->dv_profile = el->codec->dv_profile ?
++                        el->codec->dv_profile : 7;
++                    bl->codec->dv_level = el->codec->dv_level;
++                    bl->codec->dv_el_present = true;
++                }
 +                struct sh_stream_group *grp = talloc_zero(bl, struct sh_stream_group);
 +                bl->group = grp;
 +                el->group = grp;
@@ -55,8 +67,9 @@ index 5004fc1..067ea094f 100644
  }
  
  static void refresh_disc_metadata(struct demuxer *demuxer);
+
 diff --git a/stream/stream.h b/stream/stream.h
-index 9fda0a8..d27045e2e8 100644
+index 6b193bc..7ab7f53 100644
 --- a/stream/stream.h
 +++ b/stream/stream.h
 @@ -101,8 +101,14 @@ enum stream_ctrl {
@@ -75,13 +88,13 @@ index 9fda0a8..d27045e2e8 100644
  // playback position, as an MPEG-2 video elementary stream.
  struct stream_still_req {
 diff --git a/stream/stream_bluray.c b/stream/stream_bluray.c
-index 04b2520..0498476003 100644
+index b3eed0d..911cc3a 100644
 --- a/stream/stream_bluray.c
 +++ b/stream/stream_bluray.c
-@@ -814,6 +814,29 @@ static int bluray_stream_control(stream_t *s, int cmd, void *arg)
+@@ -836,6 +836,29 @@ static int bluray_stream_control(stream_t *s, int cmd, void *arg)
+         b->resync_owed = false;
          mp_mutex_unlock(&b->overlay_lock);
-         return ti ? STREAM_OK : STREAM_UNSUPPORTED;
-     }
+         return STREAM_OK;
 +    case STREAM_CTRL_GET_DV_INFO: {
 +        struct stream_dv_info *info = ((struct stream_dv_info *) arg);
 +        info->num_el = 0;
@@ -105,6 +118,6 @@ index 04b2520..0498476003 100644
 +        mp_mutex_unlock(&b->overlay_lock);
 +        return ti ? STREAM_OK : STREAM_UNSUPPORTED;
 +    }
-     case STREAM_CTRL_GET_CURRENT_TIME: {
-         *((double *) arg) = BD_TIME_TO_S(bd_tell_time(b->bd));
-         return STREAM_OK;
+     case STREAM_CTRL_GET_NUM_ANGLES: {
+         mp_mutex_lock(&b->overlay_lock);
+         const BLURAY_TITLE_INFO *ti = b->title_info;
