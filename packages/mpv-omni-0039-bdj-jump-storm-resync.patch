@@ -1,0 +1,36 @@
+diff --git a/demux/demux_disc.c b/demux/demux_disc.c
+index dbd194a..c5bf973 100644
+--- a/demux/demux_disc.c
++++ b/demux/demux_disc.c
+@@ -992,17 +992,28 @@ static bool d_read_packet(struct demuxer *demuxer, struct demux_packet **out_pkt
+                 // BD-J title switches can re-arm the drain right after the
+                 // player's resync seek acked a previous jump. The player
+                 // will not send another seek for the EOF this read would
+-                // return: ack the drain here and handle the jump through
+-                // the slave reopen below instead of ending the session.
++                // return: handle the jump through the slave reopen below
++                // instead of ending the session. The drain is NOT acked
++                // yet - it is acked only once the reopen succeeds (below).
++                // If the reopen is shed by the jump storm guard, leaving the
++                // drain pending lets disc_nav_update raise a new_drain edge
++                // and fire the resync seek that rebuilds the slave at the new
++                // position; acking blindly here would swallow that edge and
++                // stall the title switch on an empty slave until a manual
++                // seek (the reported black-frame/can't-play-feature bug).
+                 MP_VERBOSE(demuxer, "re-armed drain at disc id %u, "
+                            "handling without player resync\n",
+                            nav.discontinuity_id);
+-                stream_control(demuxer->stream, STREAM_CTRL_NAV_DRAIN_ACK, NULL);
+             }
+             MP_VERBOSE(demuxer, "discontinuity %u->%u, handling\n",
+                        p->last_discontinuity_id, nav.discontinuity_id);
+             if (!process_discontinuity(demuxer, nav.discontinuity_id))
+                 return false;
++            if (nav.drain_pending) {
++                // Reopen succeeded; ack the drain so the VM event loop can
++                // advance past the jump.
++                stream_control(demuxer->stream, STREAM_CTRL_NAV_DRAIN_ACK, NULL);
++            }
+         }
+     }
+ 
