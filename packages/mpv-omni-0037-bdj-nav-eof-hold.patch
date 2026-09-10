@@ -1,0 +1,75 @@
+diff --git a/demux/demux_disc.c b/demux/demux_disc.c
+index 7a25490..dbd194a 100644
+--- a/demux/demux_disc.c
++++ b/demux/demux_disc.c
+@@ -790,6 +790,7 @@ static bool reopen_slave(struct demuxer *demuxer)
+         mp_time_ns() - p->last_reopen_ts < MP_TIME_S_TO_NS(1))
+     {
+         MP_VERBOSE(demuxer, "BD-J jump storm, deferring to player resync\n");
++        demux_free(p->slave); // free before dropping; retried by next reopen
+         p->slave = NULL;
+         return false;
+     }
+diff --git a/player/core.h b/player/core.h
+index b249a44..8f7231a 100644
+--- a/player/core.h
++++ b/player/core.h
+@@ -449,10 +449,11 @@ typedef struct MPContext {
+     struct disc_nav_state *disc_nav;
+     // Demuxer parked on an indefinite still frame (DVD/BD menu).
+     bool disc_nav_still_frame;
+-    // A BD-J menu overlay is on screen. Pure-ARGB menu titles carry no A/V
+-    // packets, so the demuxer reports EOF for them; this flag holds the
+-    // player at EOF (like still_frame) until the user navigates or the VM
+-    // jumps into a real title.
++    // A BD-J navigation session (disc-menu mode) is active. Menu titles can
++    // be pure ARGB -- no A/V packets -- and title switches leave a gap while
++    // the slave demuxer is re-opened, both reporting EOF; this flag holds the
++    // player at EOF (like still_frame) until real data resumes or the session
++    // ends. Set from disc_nav_update().
+     bool disc_nav_menu_active;
+     struct encode_lavc_context *encode_lavc_ctx;
+ 
+diff --git a/player/discnav.c b/player/discnav.c
+index 6adb581..b6c93a3 100644
+--- a/player/discnav.c
++++ b/player/discnav.c
+@@ -507,6 +507,17 @@ void disc_nav_update(struct MPContext *mpctx)
+         mp_notify_property(mpctx, "disc-menu-active");
+     }
+ 
++    // BD-J navigation mode (disc-menu): never end playback on a demuxer EOF.
++    // Menu titles can be pure ARGB -- no A/V packets -- and a title switch
++    // leaves a gap while the slave demuxer is re-opened for the new position.
++    // Holding here lets check_async_discontinuity's resync seek retry until
++    // real data arrives; the flag clears via the !have branch (stream gone)
++    // or when a non-BD disc plays a plain title.
++    bool is_bd_nav = (strcmp(s->info->name, "bd") == 0 ||
++                      strcmp(s->info->name, "bdmv/bluray") == 0) &&
++                     nav.nav_active;
++    mpctx->disc_nav_menu_active = is_bd_nav;
++
+     check_async_discontinuity(mpctx, s, &nav);
+     sync_current_edition(mpctx, s, &nav);
+     sync_disc_track_selection(mpctx, s, &nav);
+diff --git a/player/playloop.c b/player/playloop.c
+index 313066c..db76b51 100644
+--- a/player/playloop.c
++++ b/player/playloop.c
+@@ -1259,10 +1259,12 @@ static void handle_eof(struct MPContext *mpctx)
+      * drains and the menu frame is shown. Hold it until the user navigates,
+      * rather than ending the file. */
+     prevent_eof |= mpctx->disc_nav_still_frame;
+-    /* A BD-J menu title can be pure ARGB -- no A/V packets at all -- so the
+-     * demuxer reports EOF for it while the menu VM keeps running on screen.
+-     * Hold the file like a still frame; disc_nav_update() keeps pumping the
+-     * VM at 20Hz so button navigation and title jumps still work. */
++    /* A BD-J navigation session (disc-menu mode) is active: menu titles can be
++     * pure ARGB -- no A/V packets -- and title switches leave a gap while the
++     * slave demuxer reopens, both reporting EOF. Hold the file like a still
++     * frame; disc_nav_update() keeps pumping the VM at 20Hz so button
++     * navigation and title jumps still work, and the resync seek retries
++     * until real data resumes. */
+     prevent_eof |= mpctx->disc_nav_menu_active;
+     /* It's possible for the user to simultaneously switch both audio
+      * and video streams to "disabled" at runtime. Handle this by waiting
