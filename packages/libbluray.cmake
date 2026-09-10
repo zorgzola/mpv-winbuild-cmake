@@ -17,7 +17,10 @@ ExternalProject_Add(libbluray
         --buildtype=release
         --default-library=static
         -Denable_tools=false
-        -Dbdj_jar=enabled
+        # no-BDJ build: don't build the BD-J Java menu jars (no JDK/ant needed).
+        # libbluray still reads discs (plain BD loader); BD-J/Java navigation
+        # is intentionally not compiled/not shipped.
+        -Dbdj_jar=disabled
         -Dfreetype=enabled
         -Dlibxml2=enabled
         "-Dc_args='-Ddec_init=libbluray_dec_init -Ddir_open_default=libbluray_dir_open_default -Dfile_open_default=libbluray_file_open_default'"

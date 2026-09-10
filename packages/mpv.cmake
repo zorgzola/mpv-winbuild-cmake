@@ -25,11 +25,12 @@ if [[ \${#patches[@]} -eq 0 ]]; then
     echo \"ERROR: no mpv-omni-*.patch found in \$2\" >&2
     exit 1
 fi
-# BD-J navigation strategy lives in scripts now (disc-menu.lua +
-# auto_iso_loader.lua own menus and nav sessions; the C core stays a plain
-# BD loader). Skip the C-side discnav session-manager patches below; keep
-# 0034 (DV FEL pairing), which is independent of them (its context hooks
-# NAV_DRAIN/resync_owed that upstream f5bcfb1 already carries).
+# BD-J/Java menu machinery is intentionally NOT built in this tree
+# (libbluray -Dbdj_jar=disabled; no jars shipped, no JDK/ant needed). The C
+# core stays a plain BD loader (disc reading); the C-side discnav session
+# manager patches below are skipped. 0034 (DV FEL pairing) is independent of
+# them (its context hooks NAV_DRAIN/resync_owed that upstream f5bcfb1 already
+# carries) and is kept.
 skip_list=(
   mpv-omni-0029-*
   mpv-omni-0033-*
@@ -160,15 +161,9 @@ ExternalProject_Add_Step(mpv copy-binary
     COMMAND ${CMAKE_COMMAND} -E copy <SOURCE_DIR>/etc/mpv-unregister.bat            ${CMAKE_CURRENT_BINARY_DIR}/mpv-package/mpv-unregister.bat
     COMMAND ${CMAKE_COMMAND} -E copy <BINARY_DIR>/mpv.pdf                           ${CMAKE_CURRENT_BINARY_DIR}/mpv-package/doc/manual.pdf
     COMMAND ${CMAKE_COMMAND} -E copy ${MINGW_INSTALL_PREFIX}/etc/fonts/fonts.conf   ${CMAKE_CURRENT_BINARY_DIR}/mpv-package/mpv/fonts.conf
-    # BD-J jars. Ship the prebuilt jars in packages/bdj instead of the ones
-    # built from upstream libbluray 1.5.1: they carry the on-demand VFSCache
-    # (accessFileImp) chain needed for directory-based BD-J resources (e.g.
-    # Top Gun's BDMV/JAR/00001/) that AppCache does not cover. Verified
-    # against our statically linked libbluray (JNI-compatible, run34 test).
-    # libbluray is statically linked into mpv.exe, so its runtime jar search
-    # starts from the module paths (dl_get_path) = mpv.exe's directory.
-    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/bdj/libbluray-j2se-1.5.1.jar     ${CMAKE_CURRENT_BINARY_DIR}/mpv-package/libbluray-j2se-1.5.1.jar
-    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/bdj/libbluray-awt-j2se-1.5.1.jar ${CMAKE_CURRENT_BINARY_DIR}/mpv-package/libbluray-awt-j2se-1.5.1.jar
+    # No BD-J jars: this build has no Java/BD-J navigation (bdj_jar=disabled in
+    # libbluray.cmake), so libbluray's BD-J loader is a no-op and nothing to
+    # ship next to mpv.exe.
     ${mpv_copy_debug}
     COMMAND ${CMAKE_COMMAND} -E copy <BINARY_DIR>/libmpv-2.dll          ${CMAKE_CURRENT_BINARY_DIR}/mpv-dev/libmpv-2.dll
     COMMAND ${CMAKE_COMMAND} -E copy <BINARY_DIR>/libmpv.dll.a          ${CMAKE_CURRENT_BINARY_DIR}/mpv-dev/libmpv.dll.a
