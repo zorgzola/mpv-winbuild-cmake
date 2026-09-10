@@ -25,8 +25,36 @@ if [[ \${#patches[@]} -eq 0 ]]; then
     echo \"ERROR: no mpv-omni-*.patch found in \$2\" >&2
     exit 1
 fi
-echo \"Applying \${#patches[@]} mpv-omni patches\"
+# BD-J navigation strategy lives in scripts now (disc-menu.lua +
+# auto_iso_loader.lua own menus and nav sessions; the C core stays a plain
+# BD loader). Skip the C-side discnav session-manager patches below; keep
+# 0034 (DV FEL pairing), which is independent of them (its context hooks
+# NAV_DRAIN/resync_owed that upstream f5bcfb1 already carries).
+skip_list=(
+  mpv-omni-0029-*
+  mpv-omni-0033-*
+  mpv-omni-0035-*
+  mpv-omni-0036-*
+  mpv-omni-0037-*
+  mpv-omni-0039-*
+)
+keep=()
 for p in \"\${patches[@]}\"; do
+    skip=0
+    for s in \"\${skip_list[@]}\"; do
+        if [[ \"\$(basename \$p)\" == \$s ]]; then
+            skip=1
+            break
+        fi
+    done
+    if [[ \$skip -eq 0 ]]; then
+        keep+=(\"\$p\")
+    else
+        echo \">> skip \$(basename \$p) (C-side nav strategy → lua)\"
+    fi
+done
+echo \"Applying \${#keep[@]} mpv-omni patches (\${#patches[@]} total, \${#keep[@]} kept)\"
+for p in \"\${keep[@]}\"; do
     echo \">> \$(basename \$p)\"
     git apply --3way \"\$p\"
 done
