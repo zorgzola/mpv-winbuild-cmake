@@ -1,5 +1,4 @@
 name: mpv gcc
-run-name: mpv omni no-bdj (orender+asio+FEL)
 defaults:
   run:
     shell: bash
@@ -63,13 +62,12 @@ jobs:
           git config --global fetch.prune true
           git config --global --add safe.directory $PWD
 
-      - name: Build marker (omni no-BDJ)
+      - name: Setup JDK and Ant for BD-J jar
         run: |
-          echo "=============================================="
-          echo " mpv-omni NO-BDJ build: orender + ASIO + DV FEL"
-          echo " BD-J/Java menu stack NOT compiled (bdj_jar=disabled)"
-          echo " C-layer discnav session patches skipped"
-          echo "=============================================="
+          # pacman 7's landlock sandbox can't apply inside the GH container;
+          # --disable-sandbox makes it fall back to plain root downloads.
+          pacman -Sy --noconfirm --disable-sandbox jdk-openjdk apache-ant
+          java -version && javac -version && ant -version
 
       - uses: actions/checkout@main
         with:
