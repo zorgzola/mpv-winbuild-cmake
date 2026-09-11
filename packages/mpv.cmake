@@ -43,6 +43,7 @@ skip_list=(
   \"mpv-omni-0036-*\"
   \"mpv-omni-0037-*\"
   \"mpv-omni-0039-*\"
+  \"mpv-omni-0041-*\"
 )
 keep=()
 for p in \"\${patches[@]}\"; do
