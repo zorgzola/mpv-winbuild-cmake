@@ -1,12 +1,12 @@
 ﻿diff --git a/stream/stream_bluray.c b/stream/stream_bluray.c
-index 435d303..ec7d093 100644
+index 435d303..9ff6571 100644
 --- a/stream/stream_bluray.c
 +++ b/stream/stream_bluray.c
 @@ -42,6 +42,7 @@
  #include "common/common.h"
  #include "common/msg.h"
  #include "misc/thread_tools.h"
-+#include "misc/timers.h"
++#include "osdep/timer.h"
  #include "options/m_config.h"
  #include "options/options.h"
  #include "options/path.h"
@@ -14,7 +14,7 @@ index 435d303..ec7d093 100644
      uint64_t next_read_pos;          // expected bd_tell() of the next read
      bool read_pos_known;             // next_read_pos is valid
      bool resync_owed;                // jump settled, resync seek not acked yet
-+    int64_t resync_window_until;     // if>0, in-session resync window deadline (us)
++    int64_t resync_window_until;     // if>0, in-session resync window deadline (ns)
  
      // Disc-driven audio/sub selection, mirrored from BD_EVENT_AUDIO_STREAM
      // and BD_EVENT_PG_TEXTST{,_STREAM}. The numbers are 1-based libbluray
@@ -43,7 +43,7 @@ index 435d303..ec7d093 100644
 +            // without the cplayer resync seek that heavy script load (uosc)
 +            // can starve. A still/menu target fails to resume in time; the
 +            // window expiry below then arms the regular EOF + resync seek.
-+            b->resync_window_until = mp_time_us() + 500 * 1000;
++            b->resync_window_until = mp_time_ns() + 500 * 1000000;
              mp_mutex_unlock(&b->overlay_lock);
 -            MP_VERBOSE(s, "jump settled (id %u), EOF for demuxer resync\n",
 +            hopped = false; // settled: resume reading during the window
@@ -74,7 +74,7 @@ index 435d303..ec7d093 100644
 +        // In-session resync window exhausted without data: fall back to the
 +        // regular external resync (arm resync_owed + EOF, player resyncs it).
 +        if (b->resync_window_until &&
-+            mp_time_us() >= b->resync_window_until)
++            mp_time_ns() >= b->resync_window_until)
 +        {
 +            mp_mutex_lock(&b->overlay_lock);
 +            b->resync_window_until = 0;
