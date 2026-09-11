@@ -1,0 +1,31 @@
+﻿diff --git a/stream/stream_bluray.c b/stream/stream_bluray.c
+index 435d303..4a2617a 100644
+--- a/stream/stream_bluray.c
++++ b/stream/stream_bluray.c
+@@ -506,7 +506,7 @@ static int bluray_stream_fill_buffer(stream_t *s, void *buf, int len)
+     mp_mutex_unlock(&b->overlay_lock);
+ 
+     // Resync pending, skip the read.
+-    if (resync_owed)
++    if (resync_owed && !b->hdmv_mode)
+         return 0;
+ 
+     int idle_reads = 0;
+@@ -711,7 +711,16 @@ static int bluray_stream_fill_buffer(stream_t *s, void *buf, int len)
+                 continue;
+             b->read_pos_known = false;
+             mp_mutex_lock(&b->overlay_lock);
+-            b->resync_owed = true;
++            // Under disc nav (hdmv) the jump settles in-session: the VM keeps
++            // the session alive and either repositions itself or hands data
++            // again, so do not arm the external resync seek. The demuxer
++            // reopens the slave from the discontinuity counter it reads via
++            // GET_NAV_STATE; a pending resync here would otherwise surface a
++            // permanent EOF when the main loop is too busy to run the resync
++            // seek (uosc / script load). Plain-title playback keeps the
++            // bounded-window EOF behaviour.
++            if (!b->hdmv_mode)
++                b->resync_owed = true;
+             mp_mutex_unlock(&b->overlay_lock);
+             MP_VERBOSE(s, "jump settled (id %u), EOF for demuxer resync\n",
+                        b->discontinuity_id);
