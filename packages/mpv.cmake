@@ -62,9 +62,7 @@ done
 echo \"Applying \${#keep[@]} mpv-omni patches (\${#patches[@]} total, \${#keep[@]} kept)\"
 for p in \"\${keep[@]}\"; do
     echo \">> \$(basename \$p)\"
-    # Prefer a plain apply (covers index-less patches); fall back to --3way
-    # for patches whose context drifted across upstream re-bases.
-    git apply \"\$p\" 2>/dev/null || git apply --3way \"\$p\"
+    git apply --3way \"\$p\"
 done
 git add -A
 git commit -q --no-verify -m \"mpv-omniphony: apply orender spatial audio / ASIO / overlay patch series\"
