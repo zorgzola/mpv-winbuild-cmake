@@ -1,0 +1,13 @@
+﻿diff --git a/stream/stream_bluray.c b/stream/stream_bluray.c
+index 911cc3a..435d303 100644
+--- a/stream/stream_bluray.c
++++ b/stream/stream_bluray.c
+@@ -69,7 +69,7 @@
+ // Interval between read retries while navigation is idle
+ #define BLURAY_POLL_TIME_S   0.010
+ // In menu mode, tolerate this many consecutive idle reads at the end of playlist
+-#define BLURAY_NAV_EOF_POLLS 100
++#define BLURAY_NAV_EOF_POLLS 500
+ 
+ // A title whose playlist is at least this long is treated as the feature
+ // (the movie itself). Everything shorter -- menus, previews, stills, short

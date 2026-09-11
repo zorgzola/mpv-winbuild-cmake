@@ -39,7 +39,6 @@ fi
 # then works as intended.
 skip_list=(
   \"mpv-omni-0029-*\"
-  \"mpv-omni-0033-*\"
   \"mpv-omni-0035-*\"
   \"mpv-omni-0036-*\"
   \"mpv-omni-0037-*\"
